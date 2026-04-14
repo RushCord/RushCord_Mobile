@@ -8,18 +8,38 @@ export const axiosInstance = axios.create({
   withCredentials: true,
 });
 
-// Attach token from SecureStore on each request
+// Mỗi request: đọc jwt cookie từ SecureStore, gắn vào header
 axiosInstance.interceptors.request.use(async (config) => {
   const token = await SecureStore.getItemAsync(STORAGE_KEYS.AUTH_TOKEN);
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Cookie = `jwt=${token}`;
   }
   return config;
 });
 
-// Handle 401 globally
+// Mỗi response: nếu server set-cookie jwt → lưu vào SecureStore
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  async (response) => {
+    const setCookieHeader = response.headers["set-cookie"];
+    if (setCookieHeader) {
+      const cookies = Array.isArray(setCookieHeader)
+        ? setCookieHeader
+        : [setCookieHeader];
+      for (const cookie of cookies) {
+        if (cookie.startsWith("jwt=")) {
+          const token = cookie.split(";")[0].replace("jwt=", "").trim();
+          if (token) {
+            await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, token);
+          } else {
+            // jwt= rỗng nghĩa là logout
+            await SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);
+          }
+          break;
+        }
+      }
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);

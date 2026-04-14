@@ -59,7 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isSigningUp: true });
     try {
       const res = await axiosInstance.post("/auth/signup", data);
-      await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, res.data.token ?? "");
+      // Token được tự động lưu bởi axios interceptor (set-cookie header)
       set({ authUser: res.data });
       connectSocket(res.data._id);
     } catch (error: any) {
@@ -73,7 +73,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoggingIn: true });
     try {
       const res = await axiosInstance.post("/auth/login", data);
-      await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, res.data.token ?? "");
+      // Token được tự động lưu bởi axios interceptor (set-cookie header)
       set({ authUser: res.data });
       connectSocket(res.data._id);
     } catch (error: any) {

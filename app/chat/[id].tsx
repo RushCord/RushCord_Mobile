@@ -13,6 +13,7 @@ import {
   Image,
 } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useChatStore } from "@/store/chatStore";
@@ -23,6 +24,7 @@ import type { Message } from "@/types/message";
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { bottom } = useSafeAreaInsets();
   const [text, setText] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
@@ -65,7 +67,7 @@ export default function ChatScreen() {
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsEditing: true,
       quality: 0.5,
       base64: true,
@@ -78,14 +80,19 @@ export default function ChatScreen() {
 
   const handleLongPress = (message: Message) => {
     if (message.senderId !== authUser?._id || message.isRecalled) return;
-    Alert.alert("Message Options", undefined, [
-      {
-        text: "Recall Message",
-        style: "destructive",
-        onPress: () => recallMessage(message._id),
-      },
-      { text: "Cancel", style: "cancel" },
-    ]);
+    Alert.alert(
+      "Thu hồi tin nhắn",
+      "Bạn có muốn xóa tin nhắn này không?",
+      [
+        { text: "Không", style: "cancel" },
+        {
+          text: "Có",
+          style: "destructive",
+          onPress: () => recallMessage(message._id),
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const isOnline = selectedUser ? onlineUsers.includes(selectedUser._id) : false;
@@ -95,7 +102,8 @@ export default function ChatScreen() {
     return (
       <TouchableOpacity
         onLongPress={() => handleLongPress(item)}
-        activeOpacity={0.9}
+        delayLongPress={400}
+        activeOpacity={0.85}
         style={[styles.messageRow, isMine && styles.messageRowMine]}
       >
         {!isMine && (
@@ -159,7 +167,7 @@ export default function ChatScreen() {
           />
         )}
 
-        <View style={styles.inputBar}>
+        <View style={[styles.inputBar, { paddingBottom: Math.max(bottom, Spacing.sm) }]}>
           <TouchableOpacity onPress={handlePickImage} style={styles.iconBtn}>
             <Ionicons name="image-outline" size={24} color={Colors.textMuted} />
           </TouchableOpacity>
@@ -249,7 +257,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     padding: Spacing.sm,
-    paddingBottom: Platform.OS === "ios" ? Spacing.md : Spacing.sm,
     backgroundColor: Colors.backgroundSecondary,
     gap: Spacing.sm,
   },
