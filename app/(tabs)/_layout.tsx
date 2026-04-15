@@ -1,11 +1,18 @@
 import { Tabs, Redirect } from "expo-router";
+import { useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "@/store/authStore";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Colors } from "@/constants/theme";
 
 export default function TabsLayout() {
-  const { authUser, isCheckingAuth } = useAuthStore();
+  const { authUser, isCheckingAuth, connectSocket } = useAuthStore();
+
+  useEffect(() => {
+    if (authUser) {
+      connectSocket();
+    }
+  }, [authUser, connectSocket]);
 
   if (isCheckingAuth) return <LoadingSpinner fullScreen />;
   if (!authUser) return <Redirect href="/(auth)/login" />;

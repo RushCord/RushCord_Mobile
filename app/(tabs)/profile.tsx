@@ -13,6 +13,7 @@ import { useAuthStore } from "@/store/authStore";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Colors, Spacing, FontSize, BorderRadius } from "@/constants/theme";
+import { uploadAssetViaPresign } from "@/services/upload";
 
 export default function ProfileScreen() {
   const { authUser, updateProfile, isUpdatingProfile, logout } = useAuthStore();
@@ -29,12 +30,11 @@ export default function ProfileScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
-      base64: true,
     });
-    if (!result.canceled && result.assets[0].base64) {
-      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+    if (!result.canceled && result.assets[0]) {
       try {
-        await updateProfile({ profilePic: base64Image });
+        const uploaded = await uploadAssetViaPresign(result.assets[0], "avatar");
+        await updateProfile({ profilePic: uploaded.publicUrl });
       } catch (error: any) {
         Alert.alert("Error", error.message);
       }

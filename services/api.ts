@@ -5,45 +5,92 @@ import { API_BASE_URL, API_TIMEOUT, STORAGE_KEYS } from "@/constants/config";
 export const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT,
-  withCredentials: true,
+  headers: { "Content-Type": "application/json" },
 });
 
-// Mỗi request: đọc jwt cookie từ SecureStore, gắn vào header
+const plainClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,
+  headers: { "Content-Type": "application/json" },
+});
+
+export async function getAccessToken() {
+  return SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
+}
+
+export async function getRefreshToken() {
+  return SecureStore.getItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
+}
+
+export async function setAuthTokens(accessToken: string, refreshToken?: string) {
+  await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+  if (refreshToken) {
+    await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+  }
+}
+
+export async function clearAuthTokens() {
+  await Promise.all([
+    SecureStore.deleteItemAsync(STORAGE_KEYS.ACCESS_TOKEN),
+    SecureStore.deleteItemAsync(STORAGE_KEYS.REFRESH_TOKEN),
+  ]);
+}
+
 axiosInstance.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync(STORAGE_KEYS.AUTH_TOKEN);
+  const token = await getAccessToken();
   if (token) {
-    config.headers.Cookie = `jwt=${token}`;
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Mỗi response: nếu server set-cookie jwt → lưu vào SecureStore
+let refreshPromise: Promise<any> | null = null;
+
 axiosInstance.interceptors.response.use(
-  async (response) => {
-    const setCookieHeader = response.headers["set-cookie"];
-    if (setCookieHeader) {
-      const cookies = Array.isArray(setCookieHeader)
-        ? setCookieHeader
-        : [setCookieHeader];
-      for (const cookie of cookies) {
-        if (cookie.startsWith("jwt=")) {
-          const token = cookie.split(";")[0].replace("jwt=", "").trim();
-          if (token) {
-            await SecureStore.setItemAsync(STORAGE_KEYS.AUTH_TOKEN, token);
-          } else {
-            // jwt= rỗng nghĩa là logout
-            await SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);
-          }
-          break;
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    const status = error.response?.status;
+    const refreshToken = await getRefreshToken();
+
+    if (
+      status === 401 &&
+      originalRequest &&
+      !originalRequest._authRetry &&
+      refreshToken &&
+      !String(originalRequest.url || "").includes("/auth/refresh") &&
+      !String(originalRequest.url || "").includes("/auth/login")
+    ) {
+      originalRequest._authRetry = true;
+
+      try {
+        if (!refreshPromise) {
+          refreshPromise = plainClient
+            .post("/auth/refresh", { refreshToken })
+            .finally(() => {
+              refreshPromise = null;
+            });
         }
+
+        const { data } = await refreshPromise;
+        await setAuthTokens(
+          data.accessToken,
+          data.refreshToken ?? refreshToken,
+        );
+
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        return axiosInstance(originalRequest);
+      } catch (refreshError) {
+        await clearAuthTokens();
+        return Promise.reject(refreshError);
       }
     }
-    return response;
-  },
-  (error) => {
-    if (error.response?.status === 401) {
-      SecureStore.deleteItemAsync(STORAGE_KEYS.AUTH_TOKEN);
+
+    if (status === 401) {
+      await clearAuthTokens();
     }
+
     return Promise.reject(error);
-  }
+  },
 );

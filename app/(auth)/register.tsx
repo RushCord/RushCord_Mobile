@@ -25,13 +25,20 @@ export default function RegisterScreen() {
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
-    if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
+    if (password.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters");
       return;
     }
     try {
-      await signup({ fullName: fullName.trim(), email: email.trim(), password });
-      router.replace("/(tabs)");
+      await signup({
+        displayName: fullName.trim(),
+        email: email.trim(),
+        password,
+      });
+      router.replace({
+        pathname: "/(auth)/confirm",
+        params: { email: email.trim() },
+      });
     } catch (error: any) {
       Alert.alert("Signup Failed", error.message);
     }
@@ -45,7 +52,7 @@ export default function RegisterScreen() {
     >
       <AuthHeader
         title="Create Account"
-        subtitle="Join RushCord and start chatting"
+        subtitle="Create your account, then confirm the code from your email"
       />
 
       <View style={styles.form}>

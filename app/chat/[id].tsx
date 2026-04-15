@@ -7,14 +7,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
   Alert,
   Image,
 } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import { ResizeMode, Video } from "expo-av";
+import * as WebBrowser from "expo-web-browser";
 import { Ionicons } from "@expo/vector-icons";
 import { useChatStore } from "@/store/chatStore";
 import { useAuthStore } from "@/store/authStore";
@@ -22,11 +25,51 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Colors, Spacing, FontSize, BorderRadius } from "@/constants/theme";
 import type { Message } from "@/types/message";
 
+function isImageLikeUrl(url?: string, contentType?: string) {
+  if (!url) return false;
+  if (typeof contentType === "string" && contentType.startsWith("image/")) {
+    return true;
+  }
+  return /\.(png|jpe?g|gif|webp|bmp|heic|heif)(\?.*)?$/i.test(url);
+}
+
+function isVideoLikeUrl(url?: string, contentType?: string) {
+  if (!url) return false;
+  if (typeof contentType === "string" && contentType.startsWith("video/")) {
+    return true;
+  }
+  return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url);
+}
+
+function getDocumentKind(fileUrl?: string, fileName?: string, contentType?: string) {
+  const ct = String(contentType || "").toLowerCase();
+  const name = String(fileName || fileUrl || "").toLowerCase();
+
+  if (ct === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+  if (ct === "application/msword" || name.endsWith(".doc")) return "doc";
+  if (
+    ct === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    name.endsWith(".docx")
+  ) {
+    return "docx";
+  }
+  return null;
+}
+
+function buildDocumentPreviewUrl(fileUrl: string, kind: "pdf" | "doc" | "docx") {
+  if (kind === "pdf") {
+    return fileUrl;
+  }
+  return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(fileUrl)}`;
+}
+
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { bottom } = useSafeAreaInsets();
   const [text, setText] = useState("");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const lastPreviewTapRef = useRef<{ messageId: string; ts: number } | null>(null);
 
   const {
     messages,
@@ -34,8 +77,6 @@ export default function ChatScreen() {
     getMessages,
     sendMessage,
     recallMessage,
-    subscribeToMessages,
-    unsubscribeFromMessages,
     selectedUser,
     users,
     setSelectedUser,
@@ -48,15 +89,33 @@ export default function ChatScreen() {
       const user = users.find((u) => u._id === id);
       if (user) setSelectedUser(user);
     }
-  }, [id, users]);
+  }, [id, selectedUser, setSelectedUser, users]);
 
   useEffect(() => {
     if (id) {
       getMessages(id);
-      subscribeToMessages();
     }
-    return () => unsubscribeFromMessages();
-  }, [id]);
+  }, [getMessages, id]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
+      const nextHeight = Math.max(0, event.endCoordinates?.height ?? 0);
+      setKeyboardHeight(nextHeight);
+    });
+
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleSend = async () => {
     const trimmed = text.trim();
@@ -67,14 +126,12 @@ export default function ChatScreen() {
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
+      mediaTypes: ["images", "videos"],
+      allowsEditing: false,
       quality: 0.5,
-      base64: true,
     });
-    if (!result.canceled && result.assets[0].base64) {
-      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      await sendMessage({ image: base64Image });
+    if (!result.canceled && result.assets[0]) {
+      await sendMessage({ file: result.assets[0] });
     }
   };
 
@@ -97,6 +154,39 @@ export default function ChatScreen() {
 
   const isOnline = selectedUser ? onlineUsers.includes(selectedUser._id) : false;
 
+  const handleFilePress = async (message: Message) => {
+    if (!message.file) return;
+
+    const kind = getDocumentKind(message.file, message.fileName, message.contentType);
+    if (!kind) return;
+
+    const now = Date.now();
+    const lastTap = lastPreviewTapRef.current;
+    if (
+      !lastTap ||
+      lastTap.messageId !== message._id ||
+      now - lastTap.ts > 320
+    ) {
+      lastPreviewTapRef.current = { messageId: message._id, ts: now };
+      return;
+    }
+
+    lastPreviewTapRef.current = null;
+
+    const previewUrl = buildDocumentPreviewUrl(message.file, kind);
+
+    try {
+      await WebBrowser.openBrowserAsync(previewUrl);
+    } catch {
+      await WebBrowser.openBrowserAsync(message.file);
+    }
+  };
+
+  const keyboardOffset =
+    Platform.OS === "android"
+      ? Math.max(0, keyboardHeight - bottom)
+      : 0;
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isMine = item.senderId === authUser?._id;
     return (
@@ -112,12 +202,56 @@ export default function ChatScreen() {
         <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleOther]}>
           {item.isRecalled ? (
             <Text style={styles.recalledText}>Message recalled</Text>
+          ) : item.isDeletedForMe ? (
+            <Text style={styles.recalledText}>Message removed for you</Text>
           ) : (
             <>
               {item.text && <Text style={styles.messageText}>{item.text}</Text>}
               {item.image && (
-                <Image source={{ uri: item.image }} style={styles.messageImage} resizeMode="cover" />
+                <Image
+                  source={{ uri: item.image }}
+                  style={styles.messageImage}
+                  resizeMode="cover"
+                />
               )}
+              {Array.isArray(item.images) &&
+                item.images.map((imageUrl) => (
+                  <Image
+                    key={imageUrl}
+                    source={{ uri: imageUrl }}
+                    style={styles.messageImage}
+                    resizeMode="cover"
+                  />
+                ))}
+              {item.file &&
+                (isImageLikeUrl(item.file, item.contentType) ? (
+                  <Image source={{ uri: item.file }} style={styles.messageImage} resizeMode="cover" />
+                ) : isVideoLikeUrl(item.file, item.contentType) ? (
+                  <Video
+                    source={{ uri: item.file }}
+                    style={styles.messageVideo}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                    shouldPlay={false}
+                    isLooping={false}
+                  />
+                ) : (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => handleFilePress(item)}
+                    style={styles.fileCard}
+                  >
+                    <Ionicons name="document-outline" size={18} color={Colors.textHeader} />
+                    <View style={styles.fileMeta}>
+                      <Text style={styles.fileName} numberOfLines={1}>
+                        {item.fileName || "Attachment"}
+                      </Text>
+                      {getDocumentKind(item.file, item.fileName, item.contentType) && (
+                        <Text style={styles.fileHint}>Double tap to preview</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
             </>
           )}
           <Text style={styles.messageTime}>
@@ -148,7 +282,7 @@ export default function ChatScreen() {
       />
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         {isMessagesLoading ? (
@@ -167,30 +301,38 @@ export default function ChatScreen() {
           />
         )}
 
-        <View style={[styles.inputBar, { paddingBottom: Math.max(bottom, Spacing.sm) }]}>
-          <TouchableOpacity onPress={handlePickImage} style={styles.iconBtn}>
-            <Ionicons name="image-outline" size={24} color={Colors.textMuted} />
-          </TouchableOpacity>
+        <SafeAreaView
+          edges={["bottom"]}
+          style={[
+            styles.inputSafeArea,
+            Platform.OS === "android" ? { marginBottom: keyboardOffset } : null,
+          ]}
+        >
+          <View style={styles.inputBar}>
+            <TouchableOpacity onPress={handlePickImage} style={styles.iconBtn}>
+              <Ionicons name="image-outline" size={24} color={Colors.textMuted} />
+            </TouchableOpacity>
 
-          <TextInput
-            style={styles.textInput}
-            value={text}
-            onChangeText={setText}
-            placeholder="Message..."
-            placeholderTextColor={Colors.textMuted}
-            multiline
-            maxLength={2000}
-            returnKeyType="default"
-          />
+            <TextInput
+              style={styles.textInput}
+              value={text}
+              onChangeText={setText}
+              placeholder="Message..."
+              placeholderTextColor={Colors.textMuted}
+              multiline
+              maxLength={2000}
+              returnKeyType="default"
+            />
 
-          <TouchableOpacity
-            onPress={handleSend}
-            style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
-            disabled={!text.trim()}
-          >
-            <Ionicons name="send" size={20} color={Colors.textHeader} />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={handleSend}
+              style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+              disabled={!text.trim()}
+            >
+              <Ionicons name="send" size={20} color={Colors.textHeader} />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </KeyboardAvoidingView>
     </>
   );
@@ -243,20 +385,52 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: BorderRadius.md,
   },
+  messageVideo: {
+    width: 240,
+    height: 320,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.backgroundTertiary,
+  },
   messageTime: {
     color: "rgba(255,255,255,0.55)",
     fontSize: FontSize.xs,
     alignSelf: "flex-end",
+  },
+  fileCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    backgroundColor: Colors.backgroundTertiary,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+  fileName: {
+    color: Colors.textHeader,
+    fontSize: FontSize.sm,
+    flexShrink: 1,
+  },
+  fileMeta: {
+    flex: 1,
+    gap: 2,
+  },
+  fileHint: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
   },
   recalledText: {
     color: Colors.textMuted,
     fontSize: FontSize.sm,
     fontStyle: "italic",
   },
+  inputSafeArea: {
+    backgroundColor: Colors.backgroundSecondary,
+  },
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
     padding: Spacing.sm,
+    paddingBottom: Spacing.sm,
     backgroundColor: Colors.backgroundSecondary,
     gap: Spacing.sm,
   },

@@ -5,13 +5,17 @@ let socket: Socket | null = null;
 
 export const getSocket = (): Socket | null => socket;
 
-export const connectSocket = (userId: string): Socket => {
-  if (socket?.connected) return socket;
+export const connectSocket = (accessToken: string): Socket => {
+  if (socket) {
+    socket.auth = { token: accessToken };
+    return socket;
+  }
 
   socket = io(SOCKET_URL, {
-    query: { userId },
+    auth: { token: accessToken },
     transports: ["websocket"],
-    autoConnect: true,
+    autoConnect: false,
+    reconnection: true,
   });
 
   socket.on("connect", () => {

@@ -17,7 +17,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#5865F2"
       },
-      "package": "com.rushcord.mobile"
+      "package": "com.rushcord.mobile",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "bundler": "metro",

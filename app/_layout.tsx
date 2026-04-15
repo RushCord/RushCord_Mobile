@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { NewMessageBanner } from "@/components/ui/NewMessageBanner";
 import { useAuthStore } from "@/store/authStore";
 
 SplashScreen.preventAutoHideAsync();
@@ -39,6 +40,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+      <NewMessageBanner />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
