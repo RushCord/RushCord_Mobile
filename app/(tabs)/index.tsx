@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { getMessagePreview } from "@/lib/messagePreview";
 import { useChatStore } from "@/store/chatStore";
 import { useAuthStore } from "@/store/authStore";
@@ -16,8 +17,16 @@ import { Colors, Spacing, FontSize } from "@/constants/theme";
 import type { RecentConversation } from "@/types/conversation";
 import type { User } from "@/types/user";
 
+type ConversationListItem = {
+  conversationId: string;
+  user: User;
+  lastMessageAt: string | null;
+  lastMessage: RecentConversation["lastMessage"] | null;
+};
+
 export default function MessagesScreen() {
   const {
+    users,
     recentConversations,
     isUsersLoading,
     isRecentConversationsLoading,
@@ -37,21 +46,44 @@ export default function MessagesScreen() {
     router.push(`/chat/${user._id}`);
   };
 
+  const recentByUserId = new Map(
+    (recentConversations || [])
+      .filter((c) => c?.user?._id)
+      .map((c) => [String(c.user._id), c] as const),
+  );
+
+  const allConversations: ConversationListItem[] = (users || [])
+    .filter((u) => u && u._id)
+    .map((user) => {
+      const recent = recentByUserId.get(String(user._id));
+      return {
+        conversationId:
+          recent?.conversationId ||
+          `DM#${[String(user._id)].sort().join("#")}`,
+        user,
+        lastMessageAt: recent?.lastMessageAt ?? null,
+        lastMessage: recent?.lastMessage ?? null,
+      };
+    })
+    .sort((a, b) =>
+      String(b.lastMessageAt || "").localeCompare(String(a.lastMessageAt || "")),
+    );
+
   if (isUsersLoading || isRecentConversationsLoading) {
     return (
-      <View style={styles.centered}>
+      <SafeAreaView edges={["bottom"]} style={styles.centered}>
         <ActivityIndicator color={Colors.primary} size="large" />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={["bottom"]} style={styles.container}>
       <FlatList
-        data={recentConversations}
-        keyExtractor={(item) => item.conversationId}
+        data={allConversations}
+        keyExtractor={(item) => item.user._id}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
-        renderItem={({ item }: { item: RecentConversation }) => {
+        renderItem={({ item }: { item: ConversationListItem }) => {
           const isOnline = onlineUsers.includes(item.user._id);
           return (
             <TouchableOpacity
@@ -70,15 +102,19 @@ export default function MessagesScreen() {
                   <Text style={styles.userName} numberOfLines={1}>
                     {item.user.fullName}
                   </Text>
-                  <Text style={styles.messageTime}>
-                    {new Date(item.lastMessageAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
+                  {item.lastMessageAt ? (
+                    <Text style={styles.messageTime}>
+                      {new Date(item.lastMessageAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                  ) : null}
                 </View>
                 <Text style={styles.previewText} numberOfLines={1}>
-                  {getMessagePreview(item.lastMessage)}
+                  {item.lastMessage
+                    ? getMessagePreview(item.lastMessage)
+                    : "No messages yet"}
                 </Text>
                 <Text style={styles.userStatus}>
                   {isOnline ? "Online" : "Offline"}
@@ -89,11 +125,11 @@ export default function MessagesScreen() {
         }}
         ListEmptyComponent={
           <View style={styles.centered}>
-            <Text style={styles.emptyText}>No conversations yet</Text>
+            <Text style={styles.emptyText}>No users yet</Text>
           </View>
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

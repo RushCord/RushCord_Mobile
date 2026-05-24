@@ -10,6 +10,8 @@ import type { User } from "@/types/user";
 let newMessageHandler: ((newMessage: Message) => void) | null = null;
 let messageRecalledHandler: ((updatedMessage: Message) => void) | null = null;
 let messageRecalledMeHandler: ((updatedMessage: Message) => void) | null = null;
+let typingHandler: ((payload?: { from?: string }) => void) | null = null;
+let stopTypingHandler: ((payload?: { from?: string }) => void) | null = null;
 
 function buildDmConversationId(userIdA?: string, userIdB?: string) {
   return `DM#${[userIdA, userIdB].filter(Boolean).sort().join("#")}`;
@@ -36,6 +38,10 @@ interface ChatState {
   users: User[];
   recentConversations: RecentConversation[];
   selectedUser: User | null;
+  isTyping: boolean;
+  typingFromUserId: string | null;
+  typingUserName: string | null;
+  _typingTimer: ReturnType<typeof setTimeout> | null;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
   isRecentConversationsLoading: boolean;
@@ -46,6 +52,9 @@ interface ChatState {
   sendMessage: (payload: SendMessagePayload) => Promise<void>;
   forwardMessage: (messageId: string, receiverId: string) => Promise<void>;
   recallMessage: (messageId: string) => Promise<void>;
+  recallMessageMe: (messageId: string) => Promise<void>;
+  reactToMessage: (messageId: string, emoji: string) => Promise<void>;
+  editMessageText: (messageId: string, text: string) => Promise<void>;
   subscribeToMessages: () => void;
   unsubscribeFromMessages: () => void;
   setSelectedUser: (user: User | null) => void;
@@ -56,6 +65,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   users: [],
   recentConversations: [],
   selectedUser: null,
+  isTyping: false,
+  typingFromUserId: null,
+  typingUserName: null,
+  _typingTimer: null,
   isUsersLoading: false,
   isMessagesLoading: false,
   isRecentConversationsLoading: false,
@@ -188,6 +201,74 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  recallMessageMe: async (messageId) => {
+    try {
+      const res = await axiosInstance.put(`/messages/recall-me/${messageId}`);
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === res.data._id ? res.data : msg,
+        ),
+        recentConversations: state.recentConversations.map((conversation) =>
+          conversation.lastMessage?._id === res.data._id
+            ? {
+                ...conversation,
+                lastMessage: res.data,
+                lastMessageAt: res.data.createdAt,
+              }
+            : conversation,
+        ),
+      }));
+    } catch (error: any) {
+      console.error("recallMessageMe error:", error.response?.data?.error || error.message);
+    }
+  },
+
+  reactToMessage: async (messageId, emoji) => {
+    try {
+      const res = await axiosInstance.put(`/messages/react/${messageId}`, { emoji });
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === res.data._id ? res.data : msg,
+        ),
+        recentConversations: state.recentConversations.map((conversation) =>
+          conversation.lastMessage?._id === res.data._id
+            ? {
+                ...conversation,
+                lastMessage: res.data,
+                lastMessageAt: res.data.createdAt,
+              }
+            : conversation,
+        ),
+      }));
+    } catch (error: any) {
+      console.error("reactToMessage error:", error.response?.data?.error || error.message);
+    }
+  },
+
+  editMessageText: async (messageId, text) => {
+    try {
+      const nextText = String(text || "").trim();
+      if (!nextText) return;
+      const res = await axiosInstance.put(`/messages/edit/${messageId}`, { text: nextText });
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === res.data._id ? res.data : msg,
+        ),
+        recentConversations: state.recentConversations.map((conversation) =>
+          conversation.lastMessage?._id === res.data._id
+            ? {
+                ...conversation,
+                lastMessage: res.data,
+                lastMessageAt: res.data.createdAt,
+              }
+            : conversation,
+        ),
+      }));
+    } catch (error: any) {
+      console.error("editMessageText error:", error.response?.data?.error || error.message);
+    }
+  },
+
   subscribeToMessages: () => {
     const socket = getSocket();
     if (!socket) return;
@@ -201,6 +282,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (messageRecalledMeHandler) {
       socket.off("messageRecalledMe", messageRecalledMeHandler);
     }
+    if (typingHandler) {
+      socket.off("typing", typingHandler);
+    }
+    if (stopTypingHandler) {
+      socket.off("stopTyping", stopTypingHandler);
+    }
+    socket.off("messageReactionUpdated");
+    socket.off("messageEdited");
 
     newMessageHandler = (newMessage: Message) => {
       set((state) => {
@@ -290,6 +379,84 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
     };
     socket.on("messageRecalledMe", messageRecalledMeHandler);
+
+    const TYPING_WINDOW_MS = 10_000;
+
+    typingHandler = ({ from } = {}) => {
+      set((state) => {
+        const selected = state.selectedUser;
+        if (!selected?._id) return state;
+        if (!from || String(from) !== String(selected._id)) return state;
+
+        if (state._typingTimer) clearTimeout(state._typingTimer);
+        const timer = setTimeout(() => {
+          set({
+            isTyping: false,
+            typingFromUserId: null,
+            typingUserName: null,
+            _typingTimer: null,
+          });
+        }, TYPING_WINDOW_MS);
+
+        return {
+          isTyping: true,
+          typingFromUserId: String(from),
+          typingUserName: selected.fullName || null,
+          _typingTimer: timer,
+        };
+      });
+    };
+    socket.on("typing", typingHandler);
+
+    stopTypingHandler = ({ from } = {}) => {
+      set((state) => {
+        const selected = state.selectedUser;
+        if (!selected?._id) return state;
+        if (!from || String(from) !== String(selected._id)) return state;
+        if (state._typingTimer) clearTimeout(state._typingTimer);
+        return {
+          isTyping: false,
+          typingFromUserId: null,
+          typingUserName: null,
+          _typingTimer: null,
+        };
+      });
+    };
+    socket.on("stopTyping", stopTypingHandler);
+
+    socket.on("messageReactionUpdated", (updatedMessage: Message) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === updatedMessage._id ? updatedMessage : msg,
+        ),
+        recentConversations: state.recentConversations.map((conversation) =>
+          conversation.lastMessage?._id === updatedMessage._id
+            ? {
+                ...conversation,
+                lastMessage: updatedMessage,
+                lastMessageAt: updatedMessage.createdAt,
+              }
+            : conversation,
+        ),
+      }));
+    });
+
+    socket.on("messageEdited", (updatedMessage: Message) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id === updatedMessage._id ? updatedMessage : msg,
+        ),
+        recentConversations: state.recentConversations.map((conversation) =>
+          conversation.lastMessage?._id === updatedMessage._id
+            ? {
+                ...conversation,
+                lastMessage: updatedMessage,
+                lastMessageAt: updatedMessage.createdAt,
+              }
+            : conversation,
+        ),
+      }));
+    });
   },
 
   unsubscribeFromMessages: () => {
@@ -304,7 +471,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (messageRecalledMeHandler) {
       socket.off("messageRecalledMe", messageRecalledMeHandler);
     }
+    if (typingHandler) {
+      socket.off("typing", typingHandler);
+    }
+    if (stopTypingHandler) {
+      socket.off("stopTyping", stopTypingHandler);
+    }
+    socket.off("messageReactionUpdated");
+    socket.off("messageEdited");
+
+    const t = get()._typingTimer;
+    if (t) clearTimeout(t);
+    set({
+      isTyping: false,
+      typingFromUserId: null,
+      typingUserName: null,
+      _typingTimer: null,
+    });
   },
 
-  setSelectedUser: (user) => set({ selectedUser: user }),
+  setSelectedUser: (user) => {
+    const t = get()._typingTimer;
+    if (t) clearTimeout(t);
+    set({
+      selectedUser: user,
+      isTyping: false,
+      typingFromUserId: null,
+      typingUserName: null,
+      _typingTimer: null,
+    });
+  },
 }));

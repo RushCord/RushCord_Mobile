@@ -7,6 +7,7 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useAuthStore } from "@/store/authStore";
@@ -60,39 +61,41 @@ export default function ProfileScreen() {
   if (!authUser) return null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.avatarSection}>
-        <TouchableOpacity onPress={handlePickImage} disabled={isUpdatingProfile}>
-          <Avatar
-            uri={authUser.profilePic}
-            name={authUser.fullName}
-            size={96}
+    <SafeAreaView edges={["bottom"]} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.avatarSection}>
+          <TouchableOpacity onPress={handlePickImage} disabled={isUpdatingProfile}>
+            <Avatar
+              uri={authUser.profilePic}
+              name={authUser.fullName}
+              size={96}
+            />
+            <View style={styles.editBadge}>
+              <Text style={styles.editBadgeText}>Edit</Text>
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.name}>{authUser.fullName}</Text>
+          <Text style={styles.email}>{authUser.email}</Text>
+        </View>
+
+        <View style={styles.infoCard}>
+          <InfoRow label="Full Name" value={authUser.fullName} />
+          <InfoRow label="Email" value={authUser.email} />
+          <InfoRow
+            label="Member Since"
+            value={new Date(authUser.createdAt).toLocaleDateString()}
           />
-          <View style={styles.editBadge}>
-            <Text style={styles.editBadgeText}>Edit</Text>
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.name}>{authUser.fullName}</Text>
-        <Text style={styles.email}>{authUser.email}</Text>
-      </View>
+        </View>
 
-      <View style={styles.infoCard}>
-        <InfoRow label="Full Name" value={authUser.fullName} />
-        <InfoRow label="Email" value={authUser.email} />
-        <InfoRow
-          label="Member Since"
-          value={new Date(authUser.createdAt).toLocaleDateString()}
+        <Button
+          title="Logout"
+          onPress={handleLogout}
+          variant="danger"
+          loading={isLoggingOut}
+          style={styles.logoutBtn}
         />
-      </View>
-
-      <Button
-        title="Logout"
-        onPress={handleLogout}
-        variant="danger"
-        loading={isLoggingOut}
-        style={styles.logoutBtn}
-      />
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

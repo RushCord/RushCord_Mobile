@@ -13,6 +13,14 @@ export interface Message {
   isRecalled?: boolean;
   isDeletedForMe?: boolean;
   isForwarded?: boolean;
+  reactionCounts?: Record<string, number>;
+  isEdited?: boolean;
+  editedAt?: string;
+  editHistory?: Array<{
+    editedAt: string;
+    prevText: string;
+    nextText: string;
+  }>;
   createdAt: string;
 }
 

@@ -10,7 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rushcord.mobile"
+      "bundleIdentifier": "com.rushcord.mobile",
+      "bitcode": false
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +19,17 @@
         "backgroundColor": "#5865F2"
       },
       "package": "com.rushcord.mobile",
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -27,7 +38,9 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       "expo-secure-store",
+      "@config-plugins/react-native-webrtc",
       [
         "expo-image-picker",
         {
@@ -38,6 +51,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e36b2358-d732-4486-9e08-66d5e4041ad9"
+      }
     }
   }
 }

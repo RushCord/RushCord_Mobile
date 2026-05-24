@@ -5,6 +5,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NewMessageBanner } from "@/components/ui/NewMessageBanner";
+import { IncomingCallModal } from "@/components/call/IncomingCallModal";
 import { useAuthStore } from "@/store/authStore";
 
 SplashScreen.preventAutoHideAsync();
@@ -14,7 +15,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
   useEffect(() => {
     if (!isCheckingAuth) {
@@ -31,6 +32,15 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
+          name="call"
+          options={{
+            headerShown: true,
+            headerStyle: { backgroundColor: "#2F3136" },
+            headerTintColor: "#FFFFFF",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
           name="chat/[id]"
           options={{
             headerShown: true,
@@ -41,6 +51,7 @@ export default function RootLayout() {
         />
       </Stack>
       <NewMessageBanner />
+      <IncomingCallModal />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
