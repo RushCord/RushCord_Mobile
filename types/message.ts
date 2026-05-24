@@ -21,6 +21,7 @@ export interface Message {
     prevText: string;
     nextText: string;
   }>;
+  channelId?: string;
   createdAt: string;
 }
 

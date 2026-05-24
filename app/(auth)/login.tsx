@@ -7,123 +7,222 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Link, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { AuthHeader } from "@/components/auth/AuthHeader";
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/store/authStore";
-import { Colors, Spacing, FontSize, BorderRadius } from "@/constants/theme";
+import { useTheme } from "@/store/themeStore";
+import { Spacing, FontSize, BorderRadius } from "@/constants/theme";
 
 export default function LoginScreen() {
+  const { colors } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<"email" | "password" | null>(null);
+  
   const { login, isLoggingIn } = useAuthStore();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Error", "Please fill in all fields");
+      Alert.alert("Lỗi", "Vui lòng nhập đầy đủ email và mật khẩu");
       return;
     }
     try {
       await login({ email: email.trim(), password });
       router.replace("/(tabs)");
     } catch (error: any) {
-      Alert.alert("Login Failed", error.message);
+      Alert.alert("Đăng nhập thất bại", error.message);
     }
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <AuthHeader
-        title="Welcome back!"
-        subtitle="Sign in to your RushCord account"
-      />
-
-      <View style={styles.form}>
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={Colors.textMuted}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerSpacer} />
+        
+        {/* Sleek App Branding */}
+        <View style={styles.brandContainer}>
+          <View style={[styles.logoIcon, { backgroundColor: colors.primary }]}>
+            <Ionicons name="chatbubbles" size={36} color="#FFFFFF" />
+          </View>
+          <Text style={[styles.brandText, { color: colors.textHeader }]}>RushCord</Text>
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            placeholderTextColor={Colors.textMuted}
-            secureTextEntry
-          />
-        </View>
-
-        <Button
-          title="Sign In"
-          onPress={handleLogin}
-          loading={isLoggingIn}
-          style={styles.submitBtn}
+        <AuthHeader
+          title="Chào mừng trở lại!"
+          subtitle="Hãy đăng nhập vào tài khoản RushCord của bạn"
         />
-      </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Don&apos;t have an account? </Text>
-        <Link href="/(auth)/register" asChild>
-          <TouchableOpacity>
-            <Text style={styles.footerLink}>Create account</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-    </ScrollView>
+        <View style={styles.form}>
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: focusedField === "email" ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="email@example.com"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>Mật khẩu</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: focusedField === "password" ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry={!showPassword}
+                onFocus={() => setFocusedField("password")}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeBtn}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <Button
+            title="Đăng Nhập"
+            onPress={handleLogin}
+            loading={isLoggingIn}
+            style={{ ...styles.submitBtn, backgroundColor: colors.primary }}
+          />
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: colors.textMuted }]}>Chưa có tài khoản? </Text>
+          <Link href="/(auth)/register" asChild>
+            <TouchableOpacity>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>Đăng ký ngay</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   content: {
     flexGrow: 1,
     justifyContent: "center",
     padding: Spacing.lg,
   },
+  headerSpacer: {
+    height: 20,
+  },
+  brandContainer: {
+    alignItems: "center",
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  logoIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  brandText: {
+    fontSize: FontSize.xxl,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
   form: {
     gap: Spacing.md,
+    marginTop: Spacing.md,
   },
   field: {
     gap: Spacing.xs,
   },
   label: {
-    color: Colors.text,
-    fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontSize: FontSize.sm - 1,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  input: {
-    backgroundColor: Colors.backgroundTertiary,
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    color: Colors.text,
-    fontSize: FontSize.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    height: 48,
+    paddingHorizontal: Spacing.md,
+  },
+  inputIcon: {
+    marginRight: Spacing.sm - 2,
+  },
+  input: {
+    flex: 1,
+    height: "100%",
+    fontSize: FontSize.md,
+    paddingVertical: 0,
+  },
+  eyeBtn: {
+    padding: Spacing.xs,
   },
   submitBtn: {
     marginTop: Spacing.sm,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   footer: {
     flexDirection: "row",
@@ -131,12 +230,10 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
   },
   footerText: {
-    color: Colors.textMuted,
     fontSize: FontSize.sm,
   },
   footerLink: {
-    color: Colors.primary,
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

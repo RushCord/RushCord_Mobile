@@ -6,4 +6,12 @@ export interface RecentConversation {
   user: User;
   lastMessage: Message | null;
   lastMessageAt: string;
+  type?: "DM" | "GROUP";
+  title?: string;
+  avatar?: string;
+  cover?: string;
+  topic?: string;
+  description?: string;
+  memberCount?: number;
 }
+

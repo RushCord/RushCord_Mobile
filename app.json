@@ -47,7 +47,8 @@
           "photosPermission": "Allow RushCord to access your photos.",
           "cameraPermission": "Allow RushCord to access your camera."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

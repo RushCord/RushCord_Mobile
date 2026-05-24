@@ -7,171 +7,256 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Link, router, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { AuthHeader } from "@/components/auth/AuthHeader";
 import { Button } from "@/components/ui/Button";
-import { BorderRadius, Colors, FontSize, Spacing } from "@/constants/theme";
 import { useAuthStore } from "@/store/authStore";
+import { useTheme } from "@/store/themeStore";
+import { Spacing, FontSize, BorderRadius } from "@/constants/theme";
 
 export default function ConfirmScreen() {
+  const { colors } = useTheme();
   const params = useLocalSearchParams<{ email?: string }>();
   const initialEmail = useMemo(() => String(params.email || "").trim(), [params.email]);
   const [email, setEmail] = useState(initialEmail);
   const [otpCode, setOtpCode] = useState("");
+  const [focusedField, setFocusedField] = useState<"email" | "otp" | null>(null);
+
   const { confirmSignup, resendConfirmation, isConfirming } = useAuthStore();
   const [isResending, setIsResending] = useState(false);
 
   const handleConfirm = async () => {
     if (!email.trim() || !otpCode.trim()) {
-      Alert.alert("Error", "Please enter email and verification code");
+      Alert.alert("Lỗi", "Vui lòng điền email và mã xác minh");
       return;
     }
 
     try {
       await confirmSignup({ email: email.trim(), otpCode: otpCode.trim() });
-      Alert.alert("Success", "Email verified. You can sign in now.", [
+      Alert.alert("Thành công", "Xác thực thành công! Hãy đăng nhập tài khoản của bạn.", [
         {
-          text: "Continue",
+          text: "Tiếp tục",
           onPress: () => router.replace("/(auth)/login"),
         },
       ]);
     } catch (error: any) {
-      Alert.alert("Verification Failed", error.message);
+      Alert.alert("Xác thực thất bại", error.message);
     }
   };
 
   const handleResend = async () => {
     if (!email.trim()) {
-      Alert.alert("Error", "Please enter your email first");
+      Alert.alert("Lỗi", "Vui lòng nhập email của bạn trước");
       return;
     }
 
     try {
       setIsResending(true);
       await resendConfirmation(email.trim());
-      Alert.alert("Code Sent", "A new verification code has been sent to your email.");
+      Alert.alert("Đã gửi mã", "Mã xác thực mới đã được gửi vào email của bạn.");
     } catch (error: any) {
-      Alert.alert("Resend Failed", error.message);
+      Alert.alert("Gửi lại thất bại", error.message);
     } finally {
       setIsResending(false);
     }
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <AuthHeader
-        title="Verify your email"
-        subtitle="RushCord backend requires email confirmation before sign in"
-      />
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerSpacer} />
 
-      <View style={styles.form}>
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={Colors.textMuted}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+        {/* Sleek App Branding */}
+        <View style={styles.brandContainer}>
+          <View style={[styles.logoIcon, { backgroundColor: colors.primary }]}>
+            <Ionicons name="chatbubbles" size={36} color="#FFFFFF" />
+          </View>
+          <Text style={[styles.brandText, { color: colors.textHeader }]}>RushCord</Text>
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Verification Code</Text>
-          <TextInput
-            style={styles.input}
-            value={otpCode}
-            onChangeText={setOtpCode}
-            placeholder="6-digit code"
-            placeholderTextColor={Colors.textMuted}
-            keyboardType="number-pad"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={6}
-          />
-        </View>
-
-        <Button
-          title="Verify Email"
-          onPress={handleConfirm}
-          loading={isConfirming}
-          style={styles.submitBtn}
+        <AuthHeader
+          title="Xác minh Email"
+          subtitle="Hệ thống Backend yêu cầu kích hoạt tài khoản bằng mã xác nhận gửi tới Email của bạn"
         />
 
-        <TouchableOpacity
-          onPress={handleResend}
-          disabled={isResending}
-          style={styles.secondaryBtn}
-        >
-          <Text style={styles.secondaryBtnText}>
-            {isResending ? "Sending..." : "Resend code"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.form}>
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: focusedField === "email" ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="name@email.com"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+          </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Already verified? </Text>
-        <Link href="/(auth)/login" asChild>
-          <TouchableOpacity>
-            <Text style={styles.footerLink}>Sign in</Text>
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>Mã kích hoạt OTP</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: focusedField === "otp" ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Ionicons name="key-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                value={otpCode}
+                onChangeText={setOtpCode}
+                placeholder="Nhập 6 chữ số"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={6}
+                onFocus={() => setFocusedField("otp")}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+          </View>
+
+          <Button
+            title="Kích Hoạt Tài Khoản"
+            onPress={handleConfirm}
+            loading={isConfirming}
+            style={{ ...styles.submitBtn, backgroundColor: colors.primary }}
+          />
+
+          <TouchableOpacity
+            onPress={handleResend}
+            disabled={isResending}
+            style={styles.secondaryBtn}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>
+              {isResending ? "Đang gửi..." : "Gửi lại mã kích hoạt"}
+            </Text>
           </TouchableOpacity>
-        </Link>
-      </View>
-    </ScrollView>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: colors.textMuted }]}>Đã được kích hoạt? </Text>
+          <Link href="/(auth)/login" asChild>
+            <TouchableOpacity>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>Đăng nhập</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   content: {
     flexGrow: 1,
     justifyContent: "center",
     padding: Spacing.lg,
   },
+  headerSpacer: {
+    height: 20,
+  },
+  brandContainer: {
+    alignItems: "center",
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  logoIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  brandText: {
+    fontSize: FontSize.xxl,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
   form: {
     gap: Spacing.md,
+    marginTop: Spacing.md,
   },
   field: {
     gap: Spacing.xs,
   },
   label: {
-    color: Colors.text,
-    fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontSize: FontSize.sm - 1,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  input: {
-    backgroundColor: Colors.backgroundTertiary,
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    color: Colors.text,
-    fontSize: FontSize.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    height: 48,
+    paddingHorizontal: Spacing.md,
+  },
+  inputIcon: {
+    marginRight: Spacing.sm - 2,
+  },
+  input: {
+    flex: 1,
+    height: "100%",
+    fontSize: FontSize.md,
+    paddingVertical: 0,
   },
   submitBtn: {
     marginTop: Spacing.sm,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   secondaryBtn: {
     alignItems: "center",
     paddingVertical: Spacing.sm,
   },
   secondaryBtnText: {
-    color: Colors.primary,
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   footer: {
     flexDirection: "row",
@@ -179,12 +264,10 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
   },
   footerText: {
-    color: Colors.textMuted,
     fontSize: FontSize.sm,
   },
   footerLink: {
-    color: Colors.primary,
     fontSize: FontSize.sm,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

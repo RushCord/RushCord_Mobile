@@ -7,15 +7,19 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NewMessageBanner } from "@/components/ui/NewMessageBanner";
 import { IncomingCallModal } from "@/components/call/IncomingCallModal";
 import { useAuthStore } from "@/store/authStore";
+import { useThemeStore, useTheme } from "@/store/themeStore";
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const { isCheckingAuth, checkAuth } = useAuthStore();
+  const loadTheme = useThemeStore((state) => state.loadTheme);
+  const { theme } = useTheme();
 
   useEffect(() => {
+    loadTheme();
     checkAuth();
-  }, [checkAuth]);
+  }, [checkAuth, loadTheme]);
 
   useEffect(() => {
     if (!isCheckingAuth) {
@@ -26,7 +30,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar style={theme === "light" || theme === "cupcake" || theme === "retro" || theme === "valentine" ? "dark" : "light"} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />

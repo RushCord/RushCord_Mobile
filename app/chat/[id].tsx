@@ -25,9 +25,10 @@ import { Ionicons } from "@expo/vector-icons";
 import EmojiPicker, { type EmojiType } from "rn-emoji-keyboard";
 import { useChatStore } from "@/store/chatStore";
 import { useAuthStore } from "@/store/authStore";
+import { useTheme } from "@/store/themeStore";
 import { getSocket } from "@/services/socket";
 import { Avatar } from "@/components/ui/Avatar";
-import { Colors, Spacing, FontSize, BorderRadius } from "@/constants/theme";
+import { Spacing, FontSize, BorderRadius } from "@/constants/theme";
 import type { Message } from "@/types/message";
 
 function isImageLikeUrl(url?: string, contentType?: string) {
@@ -91,6 +92,9 @@ function getFileNameFallback(fileUrl?: string) {
 }
 
 export default function ChatScreen() {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
+  
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { bottom } = useSafeAreaInsets();
@@ -131,22 +135,36 @@ export default function ChatScreen() {
     selectedUser,
     users,
     setSelectedUser,
+    selectedConversation,
+    setSelectedConversation,
+    selectedChannel,
+    recentConversations,
   } = useChatStore();
   const { authUser, onlineUsers } = useAuthStore();
 
   // Restore selectedUser if navigated directly
   useEffect(() => {
-    if (!selectedUser && id) {
+    if (!selectedUser && id && !id.startsWith("GROUP#")) {
       const user = users.find((u) => u._id === id);
       if (user) setSelectedUser(user);
     }
   }, [id, selectedUser, setSelectedUser, users]);
 
+  // Restore selectedConversation if navigated directly
+  useEffect(() => {
+    if (id && id.startsWith("GROUP#")) {
+      const group = recentConversations.find((c) => c.conversationId === id);
+      if (group && (!selectedConversation || selectedConversation.conversationId !== id)) {
+        setSelectedConversation(group);
+      }
+    }
+  }, [id, recentConversations, selectedConversation, setSelectedConversation]);
+
   useEffect(() => {
     if (id) {
       getMessages(id);
     }
-  }, [getMessages, id]);
+  }, [getMessages, id, selectedChannel?.channelId]);
 
   const emitTyping = (nextIsTyping: boolean) => {
     const to = selectedUser?._id;
@@ -200,6 +218,7 @@ export default function ChatScreen() {
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch(() => {});
         soundRef.current = null;
+        setPlayingId(null);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -243,7 +262,7 @@ export default function ChatScreen() {
 
       const perm = await Audio.requestPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Permission", "Bạn cần cấp quyền micro để ghi âm.");
+        Alert.alert("Quyền truy cập", "Bạn cần cấp quyền micro để ghi âm.");
         return;
       }
 
@@ -456,6 +475,11 @@ export default function ChatScreen() {
     const isMine = item.senderId === authUser?._id;
     const reactions = item.reactionCounts || {};
     const reactionEntries = Object.entries(reactions).filter(([, c]) => Number(c) > 0);
+
+    const sender = users.find((u) => u._id === item.senderId);
+    const senderName = sender?.fullName || "User";
+    const senderPic = sender?.profilePic || "";
+
     return (
       <TouchableOpacity
         onLongPress={() => handleLongPress(item)}
@@ -464,9 +488,14 @@ export default function ChatScreen() {
         style={[styles.messageRow, isMine && styles.messageRowMine]}
       >
         {!isMine && (
-          <Avatar uri={selectedUser?.profilePic} name={selectedUser?.fullName} size={32} />
+          <Avatar uri={selectedConversation?.type === "GROUP" ? senderPic : selectedUser?.profilePic} name={selectedConversation?.type === "GROUP" ? senderName : selectedUser?.fullName} size={32} />
         )}
         <View style={[styles.messageContent, isMine ? styles.messageContentMine : styles.messageContentOther]}>
+          {!isMine && selectedConversation?.type === "GROUP" && (
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 2, marginLeft: 4, fontWeight: "600" }}>
+              {senderName}
+            </Text>
+          )}
           <View
             style={[
               styles.bubble,
@@ -475,9 +504,9 @@ export default function ChatScreen() {
             ]}
           >
             {item.isRecalled ? (
-              <Text style={styles.recalledText}>Message recalled</Text>
+              <Text style={styles.recalledText}>Tin nhắn đã bị thu hồi</Text>
             ) : item.isDeletedForMe ? (
-              <Text style={styles.recalledText}>Message removed for you</Text>
+              <Text style={styles.recalledText}>Tin nhắn đã bị ẩn ở phía bạn</Text>
             ) : (
               <>
                 {item.text && <Text style={styles.messageText}>{item.text}</Text>}
@@ -532,20 +561,20 @@ export default function ChatScreen() {
                     >
                       <View style={styles.voiceIcon}>
                         <Ionicons
-                          name={playingId === item._id ? "pause" : "play"}
-                          size={20}
-                          color={Colors.textHeader}
+                           name={playingId === item._id ? "pause" : "play"}
+                           size={20}
+                           color={colors.textHeader}
                         />
                       </View>
                       <View style={styles.voiceMeta}>
                         <Text style={styles.voiceTitle} numberOfLines={1}>
-                          Voice message
+                          Tin nhắn thoại
                         </Text>
                         <Text style={styles.voiceHint}>
                           {playingId === item._id ? "Đang phát..." : "Nhấn để phát"}
                         </Text>
                       </View>
-                      <Ionicons name="mic-outline" size={18} color={Colors.textMuted} />
+                      <Ionicons name="mic-outline" size={18} color={colors.textMuted} />
                     </Pressable>
                   ) : (
                     <TouchableOpacity
@@ -553,13 +582,13 @@ export default function ChatScreen() {
                       onPress={() => handleFilePress(item)}
                       style={[styles.fileCard, { width: mediaLayout.mediaWidth }]}
                     >
-                      <Ionicons name="document-outline" size={22} color={Colors.textHeader} />
+                      <Ionicons name="document-outline" size={22} color={colors.textHeader} />
                       <View style={styles.fileMeta}>
                         <Text style={styles.fileName} numberOfLines={1}>
                           {item.fileName || getFileNameFallback(item.file)}
                         </Text>
                         {getDocumentKind(item.file, item.fileName, item.contentType) && (
-                          <Text style={styles.fileHint}>Double tap to preview</Text>
+                          <Text style={styles.fileHint}>Nhấn đúp để xem trước</Text>
                         )}
                       </View>
                     </TouchableOpacity>
@@ -573,7 +602,7 @@ export default function ChatScreen() {
                   hitSlop={8}
                   style={styles.editedBadge}
                 >
-                  <Text style={styles.editedText}>edited</Text>
+                  <Text style={styles.editedText}>đã sửa</Text>
                 </Pressable>
               ) : null}
               <Text style={styles.messageTime}>
@@ -604,8 +633,12 @@ export default function ChatScreen() {
     <>
       <Stack.Screen
         options={{
-          title: selectedUser?.fullName ?? "Chat",
-          headerRight: () => (
+          title: selectedConversation?.type === "GROUP"
+            ? `# ${selectedChannel?.name || "chat"}`
+            : (selectedUser?.fullName ?? "Chat"),
+          headerStyle: { backgroundColor: colors.backgroundSecondary },
+          headerTintColor: colors.textHeader,
+          headerRight: () => selectedConversation?.type === "GROUP" ? null : (
             <View style={styles.headerRight}>
               <Pressable
                 onPress={() => {
@@ -615,12 +648,12 @@ export default function ChatScreen() {
                 hitSlop={10}
                 style={styles.headerIconBtn}
               >
-                <Ionicons name="videocam" size={20} color={Colors.textHeader} />
+                <Ionicons name="videocam" size={20} color={colors.textHeader} />
               </Pressable>
               <View
                 style={[
                   styles.headerDot,
-                  { backgroundColor: isOnline ? Colors.online : Colors.offline },
+                  { backgroundColor: isOnline ? colors.online : colors.offline },
                 ]}
               />
               <Text style={styles.headerStatus}>{isOnline ? "Online" : "Offline"}</Text>
@@ -641,6 +674,8 @@ export default function ChatScreen() {
             setEmojiOpen(false);
           }}
         />
+        
+        {/* Reaction Modal */}
         <Modal
           visible={!!reactingTo}
           transparent
@@ -649,7 +684,7 @@ export default function ChatScreen() {
         >
           <Pressable style={styles.reactionBackdrop} onPress={() => setReactingTo(null)}>
             <Pressable style={styles.reactionSheet} onPress={() => {}}>
-              <Text style={styles.reactionTitle}>React</Text>
+              <Text style={styles.reactionTitle}>Bày tỏ cảm xúc</Text>
               <View style={styles.reactionQuickRow}>
                 {QUICK_REACTIONS.map((emoji) => (
                   <Pressable
@@ -674,7 +709,7 @@ export default function ChatScreen() {
                   }}
                   style={styles.reactionActionBtn}
                 >
-                  <Ionicons name="create-outline" size={18} color={Colors.textHeader} />
+                  <Ionicons name="create-outline" size={18} color={colors.textHeader} />
                   <Text style={styles.reactionActionText}>Sửa tin nhắn</Text>
                 </Pressable>
               ) : null}
@@ -688,7 +723,7 @@ export default function ChatScreen() {
                   }}
                   style={styles.reactionActionBtn}
                 >
-                  <Ionicons name="time-outline" size={18} color={Colors.textHeader} />
+                  <Ionicons name="time-outline" size={18} color={colors.textHeader} />
                   <Text style={styles.reactionActionText}>Lịch sử sửa</Text>
                 </Pressable>
               ) : null}
@@ -702,8 +737,8 @@ export default function ChatScreen() {
                   }}
                   style={styles.reactionDangerBtn}
                 >
-                  <Ionicons name="trash-outline" size={18} color={Colors.textHeader} />
-                  <Text style={styles.reactionDangerText}>Thu hồi</Text>
+                  <Ionicons name="trash-outline" size={18} color={colors.textHeader} />
+                  <Text style={styles.reactionDangerText}>Thu hồi cho mọi người</Text>
                 </Pressable>
               ) : null}
 
@@ -716,7 +751,7 @@ export default function ChatScreen() {
                   }}
                   style={styles.reactionDangerBtn}
                 >
-                  <Ionicons name="eye-off-outline" size={18} color={Colors.textHeader} />
+                  <Ionicons name="eye-off-outline" size={18} color={colors.textHeader} />
                   <Text style={styles.reactionDangerText}>Ẩn phía tôi</Text>
                 </Pressable>
               ) : null}
@@ -730,7 +765,7 @@ export default function ChatScreen() {
                   }}
                   style={styles.reactionActionBtn}
                 >
-                  <Ionicons name="arrow-redo-outline" size={18} color={Colors.textHeader} />
+                  <Ionicons name="arrow-redo-outline" size={18} color={colors.textHeader} />
                   <Text style={styles.reactionActionText}>Chuyển tiếp</Text>
                 </Pressable>
               ) : null}
@@ -746,6 +781,7 @@ export default function ChatScreen() {
           </Pressable>
         </Modal>
 
+        {/* Forward Picker Modal */}
         <Modal
           visible={!!forwardingMsg}
           transparent
@@ -757,7 +793,7 @@ export default function ChatScreen() {
               <View style={styles.historyHeader}>
                 <Text style={styles.reactionTitle}>Chuyển tiếp đến</Text>
                 <Pressable onPress={() => setForwardingMsg(null)} hitSlop={10}>
-                  <Ionicons name="close" size={20} color={Colors.textHeader} />
+                  <Ionicons name="close" size={20} color={colors.textHeader} />
                 </Pressable>
               </View>
 
@@ -765,31 +801,32 @@ export default function ChatScreen() {
                 value={forwardQuery}
                 onChangeText={setForwardQuery}
                 placeholder="Tìm người nhận..."
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 style={styles.forwardSearch}
               />
 
               <ScrollView style={styles.forwardList}>
                 {forwardCandidates.map((u) => (
-                    <Pressable
-                      key={u._id}
-                      onPress={() => submitForward(u._id)}
-                      style={styles.forwardUserRow}
-                    >
-                      <Avatar uri={u.profilePic} name={u.fullName} size={36} />
-                      <View style={styles.forwardUserMeta}>
-                        <Text style={styles.forwardUserName} numberOfLines={1}>
-                          {u.fullName || "User"}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                    </Pressable>
-                  ))}
+                  <Pressable
+                    key={u._id}
+                    onPress={() => submitForward(u._id)}
+                    style={styles.forwardUserRow}
+                  >
+                    <Avatar uri={u.profilePic} name={u.fullName} size={36} />
+                    <View style={styles.forwardUserMeta}>
+                      <Text style={styles.forwardUserName} numberOfLines={1}>
+                        {u.fullName || "User"}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  </Pressable>
+                ))}
               </ScrollView>
             </Pressable>
           </Pressable>
         </Modal>
 
+        {/* Edit Message Modal */}
         <Modal
           visible={!!editingMsg}
           transparent
@@ -803,7 +840,7 @@ export default function ChatScreen() {
                 value={editDraft}
                 onChangeText={setEditDraft}
                 placeholder="Nhập nội dung..."
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 style={styles.editInput}
                 multiline
                 maxLength={2000}
@@ -821,6 +858,7 @@ export default function ChatScreen() {
           </Pressable>
         </Modal>
 
+        {/* History Modal */}
         <Modal
           visible={!!historyMsg}
           transparent
@@ -830,9 +868,9 @@ export default function ChatScreen() {
           <Pressable style={styles.reactionBackdrop} onPress={() => setHistoryMsg(null)}>
             <Pressable style={styles.historySheet} onPress={() => {}}>
               <View style={styles.historyHeader}>
-                <Text style={styles.reactionTitle}>Lịch sử sửa</Text>
+                <Text style={styles.reactionTitle}>Lịch sử sửa tin nhắn</Text>
                 <Pressable onPress={() => setHistoryMsg(null)} hitSlop={10}>
-                  <Ionicons name="close" size={20} color={Colors.textHeader} />
+                  <Ionicons name="close" size={20} color={colors.textHeader} />
                 </Pressable>
               </View>
               <ScrollView style={styles.historyList}>
@@ -854,7 +892,7 @@ export default function ChatScreen() {
 
         {isMessagesLoading ? (
           <View style={styles.centered}>
-            <ActivityIndicator color={Colors.primary} size="large" />
+            <ActivityIndicator color={colors.primary} size="large" />
           </View>
         ) : (
           <FlatList
@@ -872,18 +910,18 @@ export default function ChatScreen() {
 
         <SafeAreaView
           edges={["bottom"]}
-          style={[styles.inputSafeArea, { paddingBottom: bottom }]}
+          style={[styles.inputSafeArea]}
         >
           {isTyping ? (
             <View style={styles.typingBar}>
               <Text style={styles.typingText}>
-                {(typingUserName || selectedUser?.fullName || "Someone") + " is typing..."}
+                {(typingUserName || selectedUser?.fullName || "Ai đó") + " đang nhập..."}
               </Text>
             </View>
           ) : null}
           <View style={styles.inputBar}>
             <TouchableOpacity onPress={handlePickImage} style={styles.iconBtn}>
-              <Ionicons name="image-outline" size={24} color={Colors.textMuted} />
+              <Ionicons name="image-outline" size={24} color={colors.textMuted} />
             </TouchableOpacity>
 
             <Pressable
@@ -891,7 +929,7 @@ export default function ChatScreen() {
               disabled={isSoundBusy}
               style={styles.iconBtn}
             >
-              <Ionicons name="happy-outline" size={24} color={Colors.textMuted} />
+              <Ionicons name="happy-outline" size={24} color={colors.textMuted} />
             </Pressable>
 
             <Pressable
@@ -903,7 +941,7 @@ export default function ChatScreen() {
               <Ionicons
                 name={isRecording ? "mic" : "mic-outline"}
                 size={24}
-                color={isRecording ? Colors.textHeader : Colors.textMuted}
+                color={isRecording ? "#FFFFFF" : colors.textMuted}
               />
             </Pressable>
 
@@ -934,8 +972,8 @@ export default function ChatScreen() {
                   typingActiveRef.current = true;
                 }, 250);
               }}
-              placeholder="Message..."
-              placeholderTextColor={Colors.textMuted}
+              placeholder="Nhập tin nhắn..."
+              placeholderTextColor={colors.textMuted}
               multiline
               maxLength={2000}
               returnKeyType="default"
@@ -946,7 +984,7 @@ export default function ChatScreen() {
               style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
               disabled={!text.trim()}
             >
-              <Ionicons name="send" size={20} color={Colors.textHeader} />
+              <Ionicons name="send" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -955,10 +993,10 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
@@ -984,25 +1022,25 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   bubbleMine: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderBottomRightRadius: BorderRadius.sm,
   },
   bubbleOther: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderBottomLeftRadius: BorderRadius.sm,
   },
   messageText: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     lineHeight: 22,
   },
   messageImage: {
     borderRadius: BorderRadius.md,
-    backgroundColor: Colors.backgroundTertiary,
+    backgroundColor: colors.backgroundTertiary,
   },
   messageVideo: {
     borderRadius: BorderRadius.md,
-    backgroundColor: Colors.backgroundTertiary,
+    backgroundColor: colors.backgroundTertiary,
   },
   messageTime: {
     color: "rgba(255,255,255,0.55)",
@@ -1023,7 +1061,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   editedText: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.xs,
     fontWeight: "600",
   },
@@ -1048,7 +1086,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: Colors.backgroundTertiary,
+    backgroundColor: colors.backgroundTertiary,
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 5,
@@ -1057,7 +1095,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   reactionCount: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -1065,7 +1103,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    backgroundColor: Colors.backgroundTertiary,
+    backgroundColor: colors.backgroundTertiary,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
@@ -1073,7 +1111,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   fileName: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     fontWeight: "600",
     flexShrink: 1,
@@ -1083,14 +1121,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   fileHint: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: FontSize.sm,
   },
   voiceCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    backgroundColor: Colors.backgroundTertiary,
+    backgroundColor: colors.backgroundTertiary,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
@@ -1100,7 +1138,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1109,69 +1147,71 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   voiceTitle: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     fontWeight: "600",
   },
   voiceHint: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: FontSize.sm,
   },
   recalledText: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: FontSize.sm,
     fontStyle: "italic",
   },
   inputSafeArea: {
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: colors.backgroundSecondary,
   },
   typingBar: {
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xs,
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: colors.backgroundSecondary,
   },
   typingText: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: FontSize.sm,
   },
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
     padding: Spacing.sm,
-    paddingBottom: Spacing.sm,
-    backgroundColor: Colors.backgroundSecondary,
+    paddingBottom: Spacing.sm + 4,
+    backgroundColor: colors.backgroundSecondary,
     gap: Spacing.sm,
   },
   iconBtn: {
     padding: Spacing.xs,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   micBtnRecording: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.danger,
     borderRadius: 999,
   },
   textInput: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.lg,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    color: Colors.text,
+    color: colors.text,
     fontSize: FontSize.md,
     maxHeight: 120,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   sendBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     width: 38,
     height: 38,
     borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   sendBtnDisabled: {
-    backgroundColor: Colors.surface,
+    opacity: 0.5,
   },
   headerRight: {
     flexDirection: "row",
@@ -1194,26 +1234,29 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   headerStatus: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: FontSize.sm,
   },
 
   reactionBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
     padding: Spacing.md,
   },
   reactionSheet: {
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: colors.backgroundSecondary,
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
     gap: Spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   reactionTitle: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     fontWeight: "700",
+    marginBottom: Spacing.xs,
   },
   reactionQuickRow: {
     flexDirection: "row",
@@ -1224,9 +1267,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   reactionBtnText: {
     fontSize: 22,
@@ -1236,58 +1281,66 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: Colors.surface,
+    backgroundColor: "rgba(242, 63, 67, 0.1)",
     borderRadius: BorderRadius.md,
     paddingVertical: 12,
   },
   reactionDangerText: {
-    color: Colors.textHeader,
+    color: colors.danger,
     fontSize: FontSize.md,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   reactionActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   reactionActionText: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     fontWeight: "600",
   },
   reactionMoreRow: {
-    paddingTop: 2,
+    paddingTop: 4,
   },
   reactionMoreBtn: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginRight: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   reactionMoreText: {
     fontSize: 20,
   },
 
   editSheet: {
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: colors.backgroundSecondary,
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
     gap: Spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   editInput: {
     minHeight: 96,
     maxHeight: 180,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    color: Colors.text,
+    color: colors.text,
     fontSize: FontSize.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   editActions: {
     flexDirection: "row",
@@ -1295,99 +1348,112 @@ const styles = StyleSheet.create({
   },
   editCancelBtn: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     paddingVertical: 12,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   editCancelText: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     fontWeight: "600",
   },
   editSaveBtn: {
     flex: 1,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: BorderRadius.md,
     paddingVertical: 12,
     alignItems: "center",
   },
   editSaveText: {
-    color: Colors.textHeader,
+    color: "#FFFFFF",
     fontSize: FontSize.md,
     fontWeight: "700",
   },
 
   historySheet: {
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: colors.backgroundSecondary,
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
     gap: Spacing.sm,
     maxHeight: "80%",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   historyHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: Spacing.xs,
   },
   historyList: {
     marginTop: 4,
   },
   historyItem: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginBottom: 10,
     gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   historyTime: {
-    color: Colors.textMuted,
-    fontSize: FontSize.sm,
+    color: colors.textMuted,
+    fontSize: FontSize.sm - 1,
   },
   historyLabel: {
-    color: Colors.textMuted,
-    fontSize: FontSize.sm,
+    color: colors.textMuted,
+    fontSize: FontSize.sm - 1,
     fontWeight: "600",
   },
   historyText: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     lineHeight: 20,
   },
 
   forwardSheet: {
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: colors.backgroundSecondary,
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
     gap: Spacing.sm,
     maxHeight: "80%",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   forwardSearch: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: 10,
-    color: Colors.text,
+    color: colors.text,
     fontSize: FontSize.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   forwardList: {
-    marginTop: 2,
+    marginTop: 4,
   },
   forwardUserRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: 10,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   forwardUserMeta: {
     flex: 1,
   },
   forwardUserName: {
-    color: Colors.textHeader,
+    color: colors.textHeader,
     fontSize: FontSize.md,
     fontWeight: "600",
   },
