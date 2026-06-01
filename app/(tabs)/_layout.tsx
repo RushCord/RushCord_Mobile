@@ -1,6 +1,8 @@
 import { Tabs, Redirect } from "expo-router";
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useTheme } from "@/store/themeStore";
@@ -8,6 +10,7 @@ import { useTheme } from "@/store/themeStore";
 export default function TabsLayout() {
   const { authUser, isCheckingAuth, connectSocket } = useAuthStore();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (authUser) {
@@ -26,9 +29,14 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: colors.backgroundTertiary,
           borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
+          height: Platform.OS === "android" ? (insets.bottom > 0 ? 60 + insets.bottom : 76) : (60 + insets.bottom),
+          paddingBottom: Platform.OS === "android" ? (insets.bottom > 0 ? insets.bottom : 16) : (insets.bottom > 0 ? insets.bottom : 6),
+          paddingTop: 6,
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
@@ -41,6 +49,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          headerShown: false,
           title: "Chats",
           tabBarLabel: "Chats",
           tabBarIcon: ({ color, size }) => (

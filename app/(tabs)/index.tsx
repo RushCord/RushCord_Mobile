@@ -104,7 +104,7 @@ export default function MessagesScreen() {
 
   if (isUsersLoading || isRecentConversationsLoading) {
     return (
-      <SafeAreaView edges={["bottom"]} style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={["top", "bottom"]} style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={colors.primary} size="large" />
       </SafeAreaView>
     );
@@ -113,7 +113,7 @@ export default function MessagesScreen() {
   const isHomeSelected = selectedConversation === null;
 
   return (
-    <SafeAreaView edges={["bottom"]} style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={["top", "bottom"]} style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.mainLayout}>
         {/* ==================================================== */}
         {/* COLUMN 1: LEFT VERTICAL SERVER SIDEBAR (RAIL)        */}

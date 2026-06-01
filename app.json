@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "RushCord",
-    "slug": "rushcord-mobile",
+    "slug": "rushcord",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -56,8 +56,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e36b2358-d732-4486-9e08-66d5e4041ad9"
+        "projectId": "d0d15b6e-df30-4cef-9c90-305c2ae16b85"
       }
-    }
+    },
+    "owner": "zblackz1oooo"
   }
 }

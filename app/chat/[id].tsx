@@ -162,9 +162,17 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (id) {
-      getMessages(id);
+      if (id.startsWith("GROUP#")) {
+        if (selectedConversation && selectedConversation.conversationId === id) {
+          getMessages(id);
+        }
+      } else {
+        if (selectedUser && selectedUser._id === id) {
+          getMessages(id);
+        }
+      }
     }
-  }, [getMessages, id, selectedChannel?.channelId]);
+  }, [getMessages, id, selectedConversation?.conversationId, selectedUser?._id, selectedChannel?.channelId]);
 
   const emitTyping = (nextIsTyping: boolean) => {
     const to = selectedUser?._id;

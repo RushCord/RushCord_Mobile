@@ -31,7 +31,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="rushcord"/>
-        <data android:scheme="exp+rushcord-mobile"/>
+        <data android:scheme="exp+rushcord"/>
       </intent-filter>
     </activity>
   </application>
